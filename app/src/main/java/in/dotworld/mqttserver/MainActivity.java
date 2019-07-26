@@ -16,6 +16,8 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.Toast;
 
+import org.apache.log4j.BasicConfigurator;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -24,10 +26,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Properties;
 
 import in.dotworld.mqttserver.broker.MQTTService;
+import in.dotworld.mqttserver.broker.ServerInstance;
 import in.dotworld.mqttserver.util.InputFilterMinMax;
 import in.dotworld.mqttserver.util.Utils;
 import io.moquette.BrokerConstants;
@@ -38,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean mBound = false;
     Context context;
 
-    EditText port, username, password;
+    EditText port, username, password, host;
     RadioButton auth, noAuth;
     LinearLayout authFields;
     File confFile, passwordFile;
@@ -66,7 +72,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         context = this;
         setContentView(R.layout.activity_main);
-
+        BasicConfigurator.configure();
+        host = findViewById(R.id.host);
         port = findViewById(R.id.port);
         port.setFilters(new InputFilter[]{new InputFilterMinMax(1, 65535)});
         username = findViewById(R.id.username);
@@ -80,8 +87,24 @@ public class MainActivity extends AppCompatActivity {
         passwordFile = new File(getApplicationContext().getDir("media", 0).getAbsolutePath() + Utils.PASSWORD_FILE);
         Log.i("MAIN", confFile.getAbsolutePath());
         loadConfig();
-        startService();
+        if(mBound && ServerInstance.getServerInstance() == null){
+            startService();
+        }
+        Log.i("MAIN", "JAVA : " + String.valueOf(Utils.getVersion()));
     }
+
+    public void getSubs(View v) {
+        try {
+            Collection<String> clients = ServerInstance.getServerInstance().getConnectionsManager().getConnectedClientIds();
+
+            clients.forEach(client -> {
+                Log.i("Clients", String.valueOf(ServerInstance.getServerInstance().getConnectionsManager().isConnected(client)));
+            });
+        } catch (Exception e) {
+
+        }
+    }
+
 
     public void onRadioButtonClicked(View view) {
         // Is the button now checked?
@@ -105,8 +128,10 @@ public class MainActivity extends AppCompatActivity {
     private Properties defaultConfig() {
         Properties props = new Properties();
         props.setProperty(BrokerConstants.PERSISTENT_STORE_PROPERTY_NAME, context.getExternalFilesDir(null).getAbsolutePath() + File.separator + BrokerConstants.DEFAULT_MOQUETTE_STORE_MAP_DB_FILENAME);
-        props.setProperty(BrokerConstants.PORT_PROPERTY_NAME, "1212");
+        props.setProperty(BrokerConstants.PORT_PROPERTY_NAME, "1883");
         props.setProperty(BrokerConstants.NEED_CLIENT_AUTH, "false");
+        props.setProperty(BrokerConstants.HOST_PROPERTY_NAME, Utils.getBrokerURL(this));
+        props.setProperty(BrokerConstants.WEB_SOCKET_PORT_PROPERTY_NAME, String.valueOf(BrokerConstants.WEBSOCKET_PORT));
         return props;
     }
 
@@ -131,6 +156,8 @@ public class MainActivity extends AppCompatActivity {
         Properties props = new Properties();
         props.setProperty(BrokerConstants.PERSISTENT_STORE_PROPERTY_NAME, context.getExternalFilesDir(null).getAbsolutePath() + File.separator + BrokerConstants.DEFAULT_MOQUETTE_STORE_MAP_DB_FILENAME);
         props.setProperty(BrokerConstants.PORT_PROPERTY_NAME, vPort);
+        props.setProperty(BrokerConstants.HOST_PROPERTY_NAME, Utils.getBrokerURL(this));
+        props.setProperty(BrokerConstants.WEB_SOCKET_PORT_PROPERTY_NAME, String.valueOf(BrokerConstants.WEBSOCKET_PORT));
         props.setProperty(BrokerConstants.NEED_CLIENT_AUTH, String.valueOf(vAuth));
         if (vAuth) {
             Log.i("MAIN", "Setting password");
@@ -157,9 +184,9 @@ public class MainActivity extends AppCompatActivity {
             updateUI(props);
             return props;
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            Log.e("MAIN", "Config file not found. Using default config");
         } catch (IOException ex) {
-            ex.printStackTrace();
+            Log.e("MAIN", "IOException. Using default config");
         }
         Properties props = defaultConfig();
         updateUI(props);
@@ -171,6 +198,8 @@ public class MainActivity extends AppCompatActivity {
         password.setText("");
 
         port.setText(props.getProperty(BrokerConstants.PORT_PROPERTY_NAME));
+        host.setText(props.getProperty(BrokerConstants.HOST_PROPERTY_NAME));
+        props.setProperty(BrokerConstants.WEB_SOCKET_PORT_PROPERTY_NAME, String.valueOf(BrokerConstants.WEBSOCKET_PORT));
         if (props.getProperty(BrokerConstants.NEED_CLIENT_AUTH) != null && Boolean.valueOf(props.getProperty(BrokerConstants.NEED_CLIENT_AUTH))) {
             auth.setChecked(true);
             authFields.setVisibility(View.VISIBLE);
@@ -192,7 +221,7 @@ public class MainActivity extends AppCompatActivity {
         Intent serviceIntent = new Intent(this, MQTTService.class);
 
         Bundle bundle = new Bundle();
-        bundle.putSerializable("config", saveAndGetConfig());
+        bundle.putSerializable("config", defaultConfig());
         serviceIntent.putExtras(bundle);
 
         startService(serviceIntent);

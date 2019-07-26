@@ -3,7 +3,9 @@ package in.dotworld.mqttserver.util;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
+import android.text.format.Formatter;
 import android.util.Log;
 
 import java.math.BigInteger;
@@ -23,6 +25,16 @@ public class Utils {
     public static void isPortOpen(int port) {
         SocketCheckTask task = new SocketCheckTask();
         task.execute(port);
+    }
+
+    public static String  getVersion() {
+        String javaVersion = System.getProperty("java.version");
+        System.out.format("Java Version = '%s'", javaVersion);
+        return javaVersion;
+    }
+
+    public static String getBrokerURL(Context ctx) {
+        return Formatter.formatIpAddress(((WifiManager) ctx.getSystemService(Context.WIFI_SERVICE)).getConnectionInfo().getIpAddress());
     }
 
     public static void showDialog(Context content, String message) {
